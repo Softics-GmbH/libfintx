@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -11,9 +11,72 @@ namespace libfintx.FinTS;
 public partial class FinTsClient
 {
     /// <summary>
+    /// The pain descriptor for SEPA direct debits as announced by the bank in HISPAS.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Softics fork: upstream hard-codes <c>pain.008.002.02</c> in HKDSE and HKDME. That
+    /// version was withdrawn by the German banking industry in November 2025 and will be
+    /// switched off on 14 November 2026, so a hard-coded descriptor makes every direct debit
+    /// fail - and it fails AFTER submission.
+    /// </para>
+    /// <para>
+    /// <c>null</c> means the bank did not announce any pain version for direct debits; the
+    /// callers then fall back to the current version, never to the withdrawn one.
+    /// </para>
+    /// </remarks>
+    public string HISPAS_PainDirectDebit { get; set; }
+
+    /// <summary>
     /// Regex pattern for HIRMG/HIRMS messages.
     /// </summary>
     private const string PatternResultMessage = @"(\d{4}):.*?:(.+)";
+
+    /// <summary>
+    /// Picks the pain descriptor for SEPA direct debits out of the HISPAS payload.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Softics fork. Preference order: the current version <c>pain.008.001.08</c> wins; any
+    /// other <c>.001</c> version is taken as announced; if the bank names only the withdrawn
+    /// <c>pain.008.002.02</c>, that value is returned AND logged, because a direct debit built
+    /// on it will be rejected after submission and the log is the only place where that is
+    /// visible beforehand.
+    /// </para>
+    /// <para>Returns <c>null</c> when the payload names no direct debit scheme at all.</para>
+    /// </remarks>
+    internal string SelectDirectDebitDescriptor(string payload)
+    {
+        if (string.IsNullOrEmpty(payload))
+            return null;
+
+        const string current = "pain.008.001.08";
+        const string withdrawn = "pain.008.002.02";
+
+        if (payload.Contains(current))
+            return current;
+
+        var announced = Regex.Matches(payload, @"pain\.008\.001\.\d{2}")
+            .Cast<Match>()
+            .Select(m => m.Value)
+            .OrderByDescending(v => v, StringComparer.Ordinal)
+            .FirstOrDefault();
+
+        if (announced != null)
+            return announced;
+
+        if (payload.Contains(withdrawn))
+        {
+            Logger.LogInformation(
+                $"HISPAS announces only the withdrawn direct debit scheme {withdrawn}. "
+                + $"Collections will use {current} anyway; the bank is expected to reject "
+                + "the withdrawn scheme from 14 November 2026 at the latest.");
+
+            return withdrawn;
+        }
+
+        return null;
+    }
 
     private Segment Parse_Segment(string segmentCode)
     {
@@ -251,6 +314,8 @@ public partial class FinTsClient
 
                         if (this.HISPAS_Pain == 0)
                             this.HISPAS_Pain = 3; // -> Fallback. Most banks accept the newest pain version
+
+                        this.HISPAS_PainDirectDebit = SelectDirectDebitDescriptor(hispas.Payload);
 
                         this.HISPAS_AccountNationalAllowed = hispas.IsAccountNationalAllowed;
                     }
