@@ -1,4 +1,4 @@
-﻿/*	
+/*	
  * 	
  *  This file is part of libfintx.
  *  
@@ -123,6 +123,33 @@ public class ConnectionDetails
     /// System ID (Kundensystem-ID)
     /// </summary>
     public string CustomerSystemId { get; set; }
+
+    /// <summary>
+    /// The customer id (dt. Kunden-ID) of the HKIDN segment, when the bank issues it
+    /// separately from the login name.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Softics fork. Most German banks use one value for both; some issue two (ALF-BanCo shows
+    /// both fields, the second one optional). Upstream silently puts <see cref="UserId"/> into
+    /// the customer id of HKIDN as well as into the signature head, so a second value could be
+    /// stored but never sent.
+    /// </para>
+    /// <para>
+    /// Leave it empty and nothing changes: <see cref="CustomerIdEscaped"/> falls back to
+    /// <see cref="UserId"/>, which is exactly what happened before. No break for existing
+    /// callers.
+    /// </para>
+    /// </remarks>
+    public string CustomerId { get; set; }
+
+    /// <summary>
+    /// The customer id for the HKIDN segment - <see cref="CustomerId"/> when given, else
+    /// <see cref="UserId"/>. The signature head (HNSHK/HNVSK) keeps using
+    /// <see cref="UserIdEscaped"/>.
+    /// </summary>
+    public string CustomerIdEscaped =>
+        Helper.EscapeHbciString(string.IsNullOrWhiteSpace(CustomerId) ? UserId : CustomerId);
 
     // Security
     public SecurityProtocolType SecurityProtocol { get; set; } = SecurityProtocolType.Tls12;
