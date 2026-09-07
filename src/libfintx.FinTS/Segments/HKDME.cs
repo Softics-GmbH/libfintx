@@ -1,4 +1,4 @@
-﻿/*	
+/*	
  * 	
  *  This file is part of libfintx.
  *  
@@ -23,6 +23,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using System.Threading.Tasks;
 using libfintx.FinTS.Data;
@@ -57,7 +58,8 @@ namespace libfintx.FinTS
             sb.Append(connectionDetails.Bic);
             sb.Append(sEG.Delimiter);
             sb.Append(sEG.Delimiter);
-            sb.Append("+urn?:iso?:std?:iso?:20022?:tech?:xsd?:pain.008.002.02+@@");
+            // Softics fork: the descriptor is no longer hard-coded, see PainDescriptor.
+            sb.Append("+" + PainDescriptor.Escaped(PainDescriptor.Resolve(client, null)) + "+@@");
             string segments = sEG.toSEG(new SEG_DATA
             {
                 Header = "HKDME",
@@ -72,6 +74,80 @@ namespace libfintx.FinTS
                 connectionDetails.Bic, SettlementDate, PainData, NumberofTransactions, TotalAmount);
 
             segments = segments.Replace("@@", "@" + (message.Length - 1) + "@") + message;
+
+            if (client.BPD.IsTANRequired("HKDME"))
+            {
+                client.SEGNUM = Convert.ToInt16(SEG_NUM.Seg4);
+                segments = HKTAN.Init_HKTAN(client, segments, "HKDME");
+            }
+
+            var TAN = await FinTSMessage.Send(client, FinTSMessage.Create(client, client.HNHBS, client.HNHBK,
+                segments, client.HIRMS));
+
+            client.Parse_Message(TAN);
+
+            return TAN;
+        }
+
+        /// <summary>
+        /// Softics fork: collective collect with a ready-made pain message.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The payload is passed through unchanged - <c>pain00800202.Create</c> is not called.
+        /// </para>
+        /// <para>
+        /// The segment version comes from the bank parameter data (HIDMES) instead of being
+        /// guessed. Version 2 carries the total amount as an own data element; version 1 does
+        /// not. Sending a version 2 header with version 1 data elements is the kind of error
+        /// that the bank reports as a plain rejection.
+        /// </para>
+        /// </remarks>
+        public static async Task<String> Init_HKDME(FinTsClient client, string painXml, int numberOfTransactions,
+            decimal totalAmount, string descriptor)
+        {
+            client.Logger.LogInformation("Starting job HKDME: Collective collect money (pre-built payload)");
+
+            if (string.IsNullOrWhiteSpace(painXml))
+                throw new ArgumentException("A collection needs a payload.", nameof(painXml));
+
+            client.SEGNUM = Convert.ToInt16(SEG_NUM.Seg3);
+
+            var version = PainDescriptor.SegmentVersion(client, "HIDMES", 1, 2);
+
+            var connectionDetails = client.ConnectionDetails;
+            SEG sEG = new SEG();
+            StringBuilder sb = new StringBuilder();
+            sb.Append(connectionDetails.Iban);
+            sb.Append(DEG.Separator);
+            sb.Append(connectionDetails.Bic);
+            sb.Append(sEG.Delimiter);
+
+            if (version >= 2)
+            {
+                // Invariant culture on purpose: the default culture of a German machine writes
+                // a comma here, and the bank reads a comma as a data element separator.
+                sb.Append(totalAmount.ToString("F2", CultureInfo.InvariantCulture));
+                sb.Append(DEG.Separator);
+                sb.Append("EUR");
+            }
+
+            sb.Append(sEG.Delimiter);
+            sb.Append("+" + PainDescriptor.Escaped(PainDescriptor.Resolve(client, descriptor)) + "+@@");
+
+            string segments = sEG.toSEG(new SEG_DATA
+            {
+                Header = "HKDME",
+                Num = client.SEGNUM,
+                Version = version,
+                RefNum = 0,
+                RawData = sb.ToString()
+            });
+
+            segments = segments.Replace("@@", "@" + (painXml.Length - 1) + "@") + painXml;
+
+            client.Logger.LogInformation(
+                "HKDME: " + numberOfTransactions + " collections, segment version " + version + ".");
 
             if (client.BPD.IsTANRequired("HKDME"))
             {
