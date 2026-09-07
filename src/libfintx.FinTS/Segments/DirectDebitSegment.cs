@@ -86,5 +86,30 @@ namespace libfintx.FinTS
 
             return announced > 0 ? announced : fallback;
         }
+
+        /// <summary>
+        /// Replaces the trailing <c>@@</c> of a segment with the pain message as binary data
+        /// and terminates the segment.
+        /// </summary>
+        /// <remarks>
+        /// The existing HKDSE/HKDME methods use <c>"@" + (message.Length - 1) + "@" + message</c>
+        /// because <c>pain00800202.Create</c> ends the message with the segment terminator. A
+        /// plain XML document does not, so the length is taken in full here and the terminator
+        /// is appended. A message that already ends with <c>'</c> is accepted as well.
+        /// </remarks>
+        internal static string AttachPayload(string segment, string painXml)
+        {
+            if (segment == null || !segment.EndsWith("@@", StringComparison.Ordinal))
+                throw new ArgumentException("The segment must end with the placeholder @@.", nameof(segment));
+
+            if (string.IsNullOrWhiteSpace(painXml))
+                throw new ArgumentException("A collection needs a pain message.", nameof(painXml));
+
+            var payload = painXml.EndsWith("'", StringComparison.Ordinal)
+                ? painXml.Substring(0, painXml.Length - 1)
+                : painXml;
+
+            return segment.Substring(0, segment.Length - 2) + "@" + payload.Length + "@" + payload + "'";
+        }
     }
 }
