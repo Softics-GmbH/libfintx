@@ -44,7 +44,7 @@ namespace libfintx.FinTS
         {
             client.Logger.LogInformation("Starting job HKDSE: Collect money");
 
-            client.SEGNUM = Convert.ToInt16(SEG_NUM.Seg4);
+            client.SEGNUM = Convert.ToInt16(SEG_NUM.Seg3);
 
             var connectionDetails = client.ConnectionDetails;
             SEG sEG = new SEG();
@@ -97,7 +97,7 @@ namespace libfintx.FinTS
             if (string.IsNullOrWhiteSpace(painXml))
                 throw new ArgumentException("A collection needs a payload.", nameof(painXml));
 
-            client.SEGNUM = Convert.ToInt16(SEG_NUM.Seg4);
+            client.SEGNUM = Convert.ToInt16(SEG_NUM.Seg3);
 
             var connectionDetails = client.ConnectionDetails;
             SEG sEG = new SEG();
