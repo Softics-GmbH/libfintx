@@ -118,7 +118,7 @@ namespace libfintx.FinTS
                 RawData = sb.ToString()
             });
 
-            segments = segments.Replace("@@", "@" + (painXml.Length - 1) + "@") + painXml;
+            segments = PainDescriptor.AttachPayload(segments, painXml);
 
             client.Logger.LogInformation(
                 "HKDSE: one collection over " + amount.ToString("F2", CultureInfo.InvariantCulture) + " EUR.");

@@ -71,6 +71,39 @@ namespace libfintx.FinTS
         }
 
         /// <summary>
+        /// Puts a ready-made pain message into the binary data element of a segment that ends
+        /// in the placeholder <c>@@</c>, and terminates the segment.
+        /// </summary>
+        /// <remarks>
+        /// Upstream writes <c>"@" + (message.Length - 1) + "@" + message</c>. That is only right
+        /// because upstream's own pain generators end their message with the segment terminator
+        /// <c>'</c>: the <c>- 1</c> keeps the terminator out of the binary length, and the
+        /// terminator itself closes the segment (<see cref="SEG.toSEG"/> does not). A caller
+        /// passing a plain XML document - which is what a pain message is - lost its last
+        /// character <c>&gt;</c> to the segment body and left the segment unterminated. Banks
+        /// answer that with 9050 "Teilweise fehlerhaft" and 9160 "Nicht belegt", after the
+        /// message has been sent.
+        ///
+        /// A trailing terminator is accepted and dropped, so a message built by upstream's
+        /// generators still works. The length counts characters, which equals bytes here:
+        /// <c>FinTSMessage</c> encodes the whole message as ASCII, one byte per character.
+        /// </remarks>
+        internal static string AttachPayload(string segment, string painXml)
+        {
+            if (segment == null || !segment.EndsWith("@@", StringComparison.Ordinal))
+                throw new ArgumentException("The segment must end in the placeholder @@.", nameof(segment));
+
+            if (string.IsNullOrWhiteSpace(painXml))
+                throw new ArgumentException("A collection needs a payload.", nameof(painXml));
+
+            var payload = painXml.EndsWith("'", StringComparison.Ordinal)
+                ? painXml.Substring(0, painXml.Length - 1)
+                : painXml;
+
+            return segment.Substring(0, segment.Length - 2) + "@" + payload.Length + "@" + payload + "'";
+        }
+
+        /// <summary>
         /// The highest segment version the bank announced for the given BPD segment, capped at
         /// <paramref name="highest"/>; <paramref name="fallback"/> when the BPD says nothing.
         /// </summary>

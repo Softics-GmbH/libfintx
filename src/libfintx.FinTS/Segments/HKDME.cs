@@ -144,7 +144,7 @@ namespace libfintx.FinTS
                 RawData = sb.ToString()
             });
 
-            segments = segments.Replace("@@", "@" + (painXml.Length - 1) + "@") + painXml;
+            segments = PainDescriptor.AttachPayload(segments, painXml);
 
             client.Logger.LogInformation(
                 "HKDME: " + numberOfTransactions + " collections, segment version " + version + ".");
